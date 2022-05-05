@@ -1,0 +1,3 @@
+[submodule "KVStore"]
+	path = KVStore
+	url = git@github.com:tobiasfamos/KVStore.git
