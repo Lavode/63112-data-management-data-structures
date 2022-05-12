@@ -1,3 +1,7 @@
 [submodule "KVStore"]
 	path = KVStore
 	url = git@github.com:tobiasfamos/KVStore.git
+
+[submodule "surf"]
+	path = surf
+	url = git@github.com:lavode/surf.git
