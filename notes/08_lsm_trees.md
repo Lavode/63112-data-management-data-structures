@@ -106,8 +106,8 @@ Four kind of indexing structures:
   - If a comparison returns false, we can immediately return
   - And comparisons also always of 'small' values, e.g. pointers
 
-- Span == fanout factor. Number of bits encoded per 'part' of key
-  - E.g 256 if using bytes
+- Span == Number of bits used to encoded a digit ('part') of key per node
+  - E.g 8 if key split into byte-sized digits
 
 - Potential optimization: Can compact sequence of `count` repeated `node` into
   `(count, node)`
