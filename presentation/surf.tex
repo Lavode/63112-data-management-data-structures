@@ -81,11 +81,9 @@
 								\item $\operatorname{Range}(a, b) \coloneqq x \overset{?}{\in} X : a \leq x \leq b$
 								\item $\operatorname{Count}(a, b) \coloneqq |\{x \in X : a \leq x \leq b\}|$
 						\end{itemize}
-				\item Potential for false-positives (respectively
-						over-counting), but no false negatives (respectively
-						under-counting)
+				\item Potential for false-positives but no false negatives
 				\item Compare with Bloom filter: Only point-membership
-				\item Optional: Associate fixed-size value with each key
+				\item Optional: Fixed-size value per key
 				\item Use case of authors: Replacement for bloom filter in
 						RocksDB, an LSM-based KV store.
 		\end{itemize}
@@ -93,14 +91,15 @@
 
 \begin{frame}{Non-Goal}
 		\begin{itemize}
-				\item No addition of keys, data structure populated with keys
-						only during initializaiton
+				\item Keys only added during initialization
 						\begin{itemize}
-								\item Can be done, but not described in paper
+								\item Late addition can be done, but not
+										described in paper
 						\end{itemize}
 				\item No updates or deletion of keys
 				\item Fully in-memory
 				\item Less tight / rigorous bounds on false-positive error rate
+						than e.g. Bloom filter
 		\end{itemize}
 \end{frame}
 
@@ -112,7 +111,7 @@
 				\begin{figure}
 						\centering
 						\includegraphics[width=\textwidth]{resources/trie.png}
-						\caption{Wikimedia \autocite{booyabazookaTrieExampleSvg}}
+						\caption{Trie \autocite{booyabazookaTrieExampleSvg}}
 				\end{figure}
 				\column{0.7\textwidth}
 				\begin{itemize}
@@ -126,25 +125,6 @@
 		\end{columns}
 \end{frame}
 
-\begin{frame}{LOUDS: Efficient encoding of ordinal trees}
-		\begin{columns}
-				\column{0.4\textwidth}
-				\begin{figure}
-						\centering
-						\includegraphics[width=\textwidth]{resources/trie_louds.png}
-						\caption{\autocite{zhangSuRFPracticalRange2018}}
-				\end{figure}
-				\column{0.6\textwidth}
-				\begin{itemize}
-						\item LOUDS: Level-order unary degree sequence \autocite{jacobsonSpaceefficientStaticTrees1989}
-						\item Node with $n$ children: $n$ $1$s, followed by one $0$
-						\item Can be navigated with $\operatorname{rank}$ and
-								$\operatorname{select}$ operations
-						\item Which can be made constant-time by utilizing LUTs
-				\end{itemize}
-		\end{columns}
-\end{frame}
-
 \begin{frame}{FST: Fast succinct tries}
 		\begin{itemize}
 				\item Observation
@@ -152,13 +132,57 @@
 								\item Upper levels of tries have many edges, lower levels have few
 								\item Yet most accesses to nodes of upper level
 						\end{itemize}
-				\item LOUDS variants to accomodate this
+				\item Variants of LOUDS encoding
+						\autocite{jacobsonSpaceefficientStaticTrees1989} to
+						accomodate this
 				\item LOUDS-DENSE for upper levels: Optimized for fast lookup
 				\item LOUDS-SPARSE for lower levels: Optimized for compact storage
 		\end{itemize}
 \end{frame}
 
 \begin{frame}{LOUDS-DENSE}
+		\begin{itemize}
+				\item Three bitmaps: D-Labels, D-HasChild, D-IsPrefixKey
+						\begin{itemize}
+								\item D-Labels: Set bits corresponding to edges
+								\item D-HasChild: Set bits if corresponding edge has FST sub-trie
+								\item D-IsPrefixKey: Set bit if path up to node is a key
+						\end{itemize}
+				\item $\qty{513}{\bit}$ per node
+				\item Plus byte sequence of associated values
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{LOUDS-DENSE: Example}
+		\begin{columns}
+				\column{0.35\textwidth}
+				\begin{figure}
+						\centering
+						\includegraphics[width=\textwidth]{resources/louds_trie}
+						\caption{Example FST}
+				\end{figure}
+				\column{0.65\textwidth}
+				\begin{figure}
+						\centering
+						\includegraphics[width=\textwidth]{resources/louds_dense}
+						\caption{And its LOUDS-DENSE encoding}
+				\end{figure}
+		\end{columns}
+\end{frame}
+
+\begin{frame}{LOUDS-SPARSE}
+		\begin{itemize}
+				\item Three byte sequences: S-Labels, S-HasChild, S-LOUDS
+						\begin{itemize}
+								\item S-Labels: List of edges
+								\item S-HasChild: 1 IFF edge has FST sub-trie
+								\item S-LOUDS: 1 IFF edge is first in node
+						\end{itemize}
+				\item Plus byte sequence of associated values
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{LOUDS-SPARSE: Example}
 		\begin{columns}
 				\column{0.4\textwidth}
 				\begin{figure}
@@ -169,18 +193,102 @@
 				\column{0.6\textwidth}
 				\begin{figure}
 						\centering
-						\includegraphics[width=\textwidth]{resources/louds_dense}
-						\caption{And its LOUDS-DENSE encoding}
+						\includegraphics[width=\textwidth]{resources/louds_sparse}
+						\caption{And its LOUDS-SPARSE encoding}
 				\end{figure}
 		\end{columns}
 \end{frame}
 
-\begin{frame}{LOUDS-SPARSE}
+\begin{frame}{SURF}
+		\begin{itemize}
+				\item FST with top $k$ levels as LOUDS-DENSE, rest as
+						LOUDS-SPARSE
+				\item Truncate keys as much as possible while still allowing
+						disambiguation
+				\item Optionally use $n$ additional bits to store additional
+						information about keys
+						\begin{itemize}
+								\item Bits of actual key: Good for point and
+										range queries, no tight bound on error
+										probability
+								\item Bits of hashed key: Good only for point
+										queries, tight bound on error
+										probability
+						\end{itemize}
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{SURF: Base, Hash, Real}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf}
+				\caption{SURF variants \autocite{zhangSuRFPracticalRange2018}}
+		\end{figure}
 \end{frame}
 
 \section{Operations}
 
-\begin{frame}{Building SuRF}
+\begin{frame}{Initializing SuRF}
+		\begin{itemize}
+				\item \textbf{Goal} Given set of sorted keys, turn it into SuRF
+						data structure (i.e. LOUDS-encoded FST)
+				\item Not specified by paper
+				\item Depth-first: Process keys one by one
+						\begin{itemize}
+								\item Fairly straight-forward for generic tries
+								\item But LOUDS is a level-order encoding. No
+										clue where to place nodes in memory
+										before we encoded all nodes before it.
+						\end{itemize}
+
+				\item Breadth-firsth: Process keys in parallel, byte by byte.
+						\begin{itemize}
+								\item Allows to encode all nodes of one level
+										before moving on to the next
+								\item But requires keeping track of which keys
+										go where
+						\end{itemize}
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{Initializing SuRF: Breadth-first}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/initializing_surf_1}
+				\caption{Initializing SuRF}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Initializing SuRF: Breadth-first}
+		\begin{figure}
+				\centering
+				\includegraphics[width=0.9\textwidth]{resources/initializing_surf_2}
+				\caption{Initializing SuRF}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Initializing SuRF: Breadth-first}
+		\begin{figure}
+				\centering
+				\includegraphics[width=0.7\textwidth]{resources/initializing_surf_3}
+				\caption{Initializing SuRF}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Initializing SuRF: Breadth-first}
+		\begin{figure}
+				\centering
+				\includegraphics[height=0.6\textwidth]{resources/initializing_surf_4}
+				\caption{Initializing SuRF}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Initializing SuRF: Breadth-first}
+		\begin{figure}
+				\centering
+				\includegraphics[width=0.6\textwidth]{resources/initializing_surf_5}
+				\caption{Initializing SuRF}
+		\end{figure}
 \end{frame}
 
 \begin{frame}{Lookup operations}
@@ -188,10 +296,12 @@
 
 \section{Performance}
 
+% Not required according to newest documents
+
 \begin{frame}{Performance evaluation}
 \end{frame}
 
-\section{Summary \& Q\&A}
+\section{Summary \& QA}
 
 \begin{frame}{Summary}
 \end{frame}
