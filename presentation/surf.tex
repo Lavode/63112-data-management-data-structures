@@ -365,11 +365,24 @@
 % Not required according to newest documents
 
 \begin{frame}{Performance evaluation}
+		\textbf{Some high-level non-quantitative results from the SuRF paper}
+		\begin{itemize}
+				\item SuRF has higher false-positive rate than bloom
+				\item Hence outperformed (in RocksDB) by bloom filter for point queries
+				\item But allows to speed up range query throughput by \qty{50}{\percent}
+		\end{itemize}
 \end{frame}
 
 \section{Summary \& QA}
 
 \begin{frame}{Summary}
+		\begin{itemize}
+				\item SuRF: Data structure for probabilistic point and range
+						membership queries
+				\item FST: Succinct encoding of truncated tries
+				\item LOUDS-DS: Encoding of tries, made for fast traversal of
+						upper levels and compact storage of lower levels
+		\end{itemize}
 \end{frame}
 
 \section{References}
