@@ -3,7 +3,7 @@
 \usepackage{pgfpages}
 % Note rendering settings
 % \setbeameroption{hide notes} % Default
-\setbeameroption{show notes}
+% \setbeameroption{show notes}
 % \setbeameroption{show only notes}
 % \setbeameroption{show notes on second screen}
 
@@ -45,7 +45,7 @@
 
 % \metroset{sectionpage=simple}
 % Optional light gray fill behind block environments such as \theorem
-% \metroset{block=fill}
+\metroset{block=fill}
 
 \title{SuRF: Succinct Range Filters}
 \subtitle{Probabilistic point- and range-membership checks}
@@ -56,12 +56,6 @@
 \begin{document}
 
 \maketitle
-
-% Only show sections
-% \setcounter{tocdepth}{1}
-\begin{frame}{Outline}
-		\tableofcontents
-\end{frame}
 
 % • A motivation (what problem was the data structure designed to solve?)
 % • General layout of the data structure
@@ -121,53 +115,23 @@
 						\item Then $k \cdot (8 + 64)$ bit for $k$-child node
 						\item Hugely inefficient. Encoding \qty{1}{\byte} costs
 								\qty{9}{\byte}!
+						\item Enter LOUDS: space-efficient level-order encoding
+								of tries \autocite{jacobsonSpaceefficientStaticTrees1989}
 				\end{itemize}
 		\end{columns}
 \end{frame}
 
 \begin{frame}{FST: Fast succinct tries}
+		\begin{block}{Observation}
+						Upper levels of tries have many edges, lower levels
+						have few. Yet most accesses are to nodes of upper level.
+		\end{block}
+
 		\begin{itemize}
-				\item Observation
-						\begin{itemize}
-								\item Upper levels of tries have many edges, lower levels have few
-								\item Yet most accesses to nodes of upper level
-						\end{itemize}
-				\item Variants of LOUDS encoding
-						\autocite{jacobsonSpaceefficientStaticTrees1989} to
-						accomodate this
+				\item FST: Trie of keys, encoded with two variants of LOUDS encoding
 				\item LOUDS-DENSE for upper levels: Optimized for fast lookup
-				\item LOUDS-SPARSE for lower levels: Optimized for compact storage
+				\item LOUDS-SPARSE  for lower levels: Optimized for compact storage
 		\end{itemize}
-\end{frame}
-
-\begin{frame}{LOUDS-DENSE}
-		\begin{itemize}
-				\item Three bitmaps: D-Labels, D-HasChild, D-IsPrefixKey
-						\begin{itemize}
-								\item D-Labels: Set bits corresponding to edges
-								\item D-HasChild: Set bits if corresponding edge has FST sub-trie
-								\item D-IsPrefixKey: Set bit if path up to node is a key
-						\end{itemize}
-				\item $\qty{513}{\bit}$ per node
-				\item Plus byte sequence of associated values
-		\end{itemize}
-\end{frame}
-
-\begin{frame}{LOUDS-DENSE: Example}
-		\begin{columns}
-				\column{0.35\textwidth}
-				\begin{figure}
-						\centering
-						\includegraphics[width=\textwidth]{resources/louds_trie}
-						\caption{Example FST}
-				\end{figure}
-				\column{0.65\textwidth}
-				\begin{figure}
-						\centering
-						\includegraphics[width=\textwidth]{resources/louds_dense}
-						\caption{And its LOUDS-DENSE encoding}
-				\end{figure}
-		\end{columns}
 \end{frame}
 
 \begin{frame}{LOUDS-SPARSE}
@@ -179,6 +143,7 @@
 								\item S-LOUDS: 1 IFF edge is first in node
 						\end{itemize}
 				\item Plus byte sequence of associated values
+				\item Assume we want to store keys `f', `fa', `s'.
 		\end{itemize}
 \end{frame}
 
@@ -227,6 +192,125 @@
 \end{frame}
 
 \section{Operations}
+
+\subsection{Lookup operations}
+
+\begin{frame}{Lookup operations}
+		\begin{itemize}
+				\item Lookup operations can be implemented as combination of
+						$\operatorname{rank}$ and $\operatorname{select}$
+						queries on LOUDS-encoded datastructure.
+				\item $\operatorname{rank}_b(x)$: Number of bits with value $b$
+						up to position $x$
+				\item $\operatorname{select}_b(x)$: Position of $x$-th bit with value $b$
+				\item $B = 100010110$, $\operatorname{rank}_0(5) = 4$,
+						$\operatorname{select}_1(2) = 4$
+				\item Constant-time with use of lookup-tables: Cache rank and
+						select every $x$ bits, only count inbetween
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{itemize}
+				\item Lookup of key `toy'
+				\item Example with LOUDS-SPARSE, as bitmap-heavy LOUDS-DENSE not
+						very human-friendly
+				\item Given node starting at index $p$, find index of its $k$-th child:
+						\[
+								\operatorname{select}_1(S\text{-}LOUDS, \operatorname{rank}_1(S\text{-}HasChild, p+k) + 1)
+						\]
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf_point_lookup_1}
+				\caption{Point lookup for `toy'}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf_point_lookup_2}
+				\caption{Point lookup for `toy'}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf_point_lookup_3}
+				\caption{Point lookup for `toy'}
+		\end{figure}
+\end{frame}
+
+\section{Performance}
+
+% Not required according to newest documents
+
+\begin{frame}{Performance evaluation}
+		\textbf{Some high-level non-quantitative results from the SuRF paper}
+		\begin{itemize}
+				\item SuRF has higher false-positive rate than bloom
+				\item Hence outperformed (in RocksDB) by bloom filter for point queries
+				\item But allows to speed up range query throughput by \qty{50}{\percent}
+		\end{itemize}
+\end{frame}
+
+\section{Summary \& QA}
+
+\begin{frame}{Summary}
+		\begin{itemize}
+				\item SuRF: Data structure for probabilistic point and range
+						membership queries
+				\item FST: Succinct encoding of truncated tries
+				\item LOUDS-DS: Encoding of tries, made for fast traversal of
+						upper levels and compact storage of lower levels
+		\end{itemize}
+\end{frame}
+
+\section{References}
+
+\begin{frame}[allowframebreaks]
+		\frametitle{References}
+		\printbibliography
+\end{frame}
+
+\appendix
+\section{\appendixname}
+
+\begin{frame}{LOUDS-DENSE}
+		\begin{itemize}
+				\item Three bitmaps: D-Labels, D-HasChild, D-IsPrefixKey
+						\begin{itemize}
+								\item D-Labels: Set bits corresponding to edges
+								\item D-HasChild: Set bits if corresponding edge has FST sub-trie
+								\item D-IsPrefixKey: Set bit if path up to node is a key
+						\end{itemize}
+				\item $\qty{513}{\bit}$ per node
+				\item Plus byte sequence of associated values
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{LOUDS-DENSE: Example}
+		\begin{columns}
+				\column{0.35\textwidth}
+				\begin{figure}
+						\centering
+						\includegraphics[width=\textwidth]{resources/louds_trie}
+						\caption{Example FST}
+				\end{figure}
+				\column{0.65\textwidth}
+				\begin{figure}
+						\centering
+						\includegraphics[width=\textwidth]{resources/louds_dense}
+						\caption{And its LOUDS-DENSE encoding}
+				\end{figure}
+		\end{columns}
+\end{frame}
+
 
 \subsection{Initializing SuRF}
 
@@ -307,89 +391,5 @@
 		memory, so depth-first might be faster}
 \end{frame}
 
-\subsection{Lookup operations}
-
-\begin{frame}{Lookup operations}
-		\begin{itemize}
-				\item Lookup operations can be implemented as combination of
-						$\operatorname{rank}$ and $\operatorname{select}$
-						queries on LOUDS-encoded datastructure.
-				\item $\operatorname{rank}_b(x)$: Number of bits with value $b$
-						up to position $x$
-				\item $\operatorname{select}_b(x)$: Position of $x$-th bit with value $b$
-				\item $B = 100010110$, $\operatorname{rank}_0(5) = 4$,
-						$\operatorname{select}_1(2) = 4$
-				\item Constant-time with use of lookup-tables: Cache rank and
-						select every $x$ bits, only count inbetween
-		\end{itemize}
-\end{frame}
-
-\begin{frame}{Lookup operation: Example of point lookup for `toy'}
-		\begin{itemize}
-				\item Lookup of key `toy' in tree above
-				\item Example with LOUDS-SPARSE, as bitmap-heavy LOUDS-DENSE not
-						very human-friendly
-				\item Given node starting at index $p$, find index of its $k$-th child:
-						\[
-								\operatorname{select}_1(S\text{-}LOUDS, \operatorname{rank}_1(S\text{-}HasChild, p+k) + 1)
-						\]
-		\end{itemize}
-\end{frame}
-
-\begin{frame}{Lookup operation: Example of point lookup for `toy'}
-		\begin{figure}
-				\centering
-				\includegraphics[width=\textwidth]{resources/surf_point_lookup_1}
-				\caption{Point lookup for `toy'}
-		\end{figure}
-\end{frame}
-
-\begin{frame}{Lookup operation: Example of point lookup for `toy'}
-		\begin{figure}
-				\centering
-				\includegraphics[width=\textwidth]{resources/surf_point_lookup_2}
-				\caption{Point lookup for `toy'}
-		\end{figure}
-\end{frame}
-
-\begin{frame}{Lookup operation: Example of point lookup for `toy'}
-		\begin{figure}
-				\centering
-				\includegraphics[width=\textwidth]{resources/surf_point_lookup_3}
-				\caption{Point lookup for `toy'}
-		\end{figure}
-\end{frame}
-
-\section{Performance}
-
-% Not required according to newest documents
-
-\begin{frame}{Performance evaluation}
-		\textbf{Some high-level non-quantitative results from the SuRF paper}
-		\begin{itemize}
-				\item SuRF has higher false-positive rate than bloom
-				\item Hence outperformed (in RocksDB) by bloom filter for point queries
-				\item But allows to speed up range query throughput by \qty{50}{\percent}
-		\end{itemize}
-\end{frame}
-
-\section{Summary \& QA}
-
-\begin{frame}{Summary}
-		\begin{itemize}
-				\item SuRF: Data structure for probabilistic point and range
-						membership queries
-				\item FST: Succinct encoding of truncated tries
-				\item LOUDS-DS: Encoding of tries, made for fast traversal of
-						upper levels and compact storage of lower levels
-		\end{itemize}
-\end{frame}
-
-\section{References}
-
-\begin{frame}[allowframebreaks]
-		\frametitle{References}
-		\printbibliography
-\end{frame}
 
 \end{document}
