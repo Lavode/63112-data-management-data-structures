@@ -3,7 +3,7 @@
 \usepackage{pgfpages}
 % Note rendering settings
 % \setbeameroption{hide notes} % Default
-% \setbeameroption{show notes}
+\setbeameroption{show notes}
 % \setbeameroption{show only notes}
 % \setbeameroption{show notes on second screen}
 
@@ -228,6 +228,8 @@
 
 \section{Operations}
 
+\subsection{Initializing SuRF}
+
 \begin{frame}{Initializing SuRF}
 		\begin{itemize}
 				\item \textbf{Goal} Given set of sorted keys, turn it into SuRF
@@ -265,6 +267,14 @@
 				\includegraphics[width=0.9\textwidth]{resources/initializing_surf_2}
 				\caption{Initializing SuRF}
 		\end{figure}
+
+		\note[item]{Edge for `f' is set (D-Labels respectively S-Labels)}
+		\note[item]{There are keys left which pass through that node, so it has
+		an FST sub-component there. (D-HasChild respectively S-HasChild)}
+		\note[item]{A key ends on that node. (D-IsPrefixKey)}
+		\note[item]{Have left out storing of values for brevity}
+		\note[item]{Edge for `s' is set}
+		\note[item]{No more keys along that path, so no FST sub-component}
 \end{frame}
 
 \begin{frame}{Initializing SuRF: Breadth-first}
@@ -289,9 +299,65 @@
 				\includegraphics[width=0.6\textwidth]{resources/initializing_surf_5}
 				\caption{Initializing SuRF}
 		\end{figure}
+
+		\note[item]{Until we finally have initialized the whole tree}
+		\note[item]{Note that some details left out: Handling change from
+		LOUDS-DENSE to LOUDS-SPARSE, values, ...}
+		\note[item]{Possible that added complexity outweights cost of copying
+		memory, so depth-first might be faster}
 \end{frame}
 
+\subsection{Lookup operations}
+
 \begin{frame}{Lookup operations}
+		\begin{itemize}
+				\item Lookup operations can be implemented as combination of
+						$\operatorname{rank}$ and $\operatorname{select}$
+						queries on LOUDS-encoded datastructure.
+				\item $\operatorname{rank}_b(x)$: Number of bits with value $b$
+						up to position $x$
+				\item $\operatorname{select}_b(x)$: Position of $x$-th bit with value $b$
+				\item $B = 100010110$, $\operatorname{rank}_0(5) = 4$,
+						$\operatorname{select}_1(2) = 4$
+				\item Constant-time with use of lookup-tables: Cache rank and
+						select every $x$ bits, only count inbetween
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{itemize}
+				\item Lookup of key `toy' in tree above
+				\item Example with LOUDS-SPARSE, as bitmap-heavy LOUDS-DENSE not
+						very human-friendly
+				\item Given node starting at index $p$, find index of its $k$-th child:
+						\[
+								\operatorname{select}_1(S\text{-}LOUDS, \operatorname{rank}_1(S\text{-}HasChild, p+k) + 1)
+						\]
+		\end{itemize}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf_point_lookup_1}
+				\caption{Point lookup for `toy'}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf_point_lookup_2}
+				\caption{Point lookup for `toy'}
+		\end{figure}
+\end{frame}
+
+\begin{frame}{Lookup operation: Example of point lookup for `toy'}
+		\begin{figure}
+				\centering
+				\includegraphics[width=\textwidth]{resources/surf_point_lookup_3}
+				\caption{Point lookup for `toy'}
+		\end{figure}
 \end{frame}
 
 \section{Performance}
