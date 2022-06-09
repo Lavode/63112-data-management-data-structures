@@ -1,0 +1,257 @@
+\documentclass[a4paper]{scrreprt}
+
+% Uncomment to optimize for double-sided printing.
+% \KOMAoptions{twoside}
+
+% Set binding correction manually, if known.
+% \KOMAoptions{BCOR=2cm}
+
+% Localization options
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% Sub figures
+\usepackage{subcaption}
+
+% Quotations
+\usepackage{dirtytalk}
+
+% Floats
+\usepackage{float}
+
+% Enhanced verbatim sections. We're mainly interested in
+% \verbatiminput though.
+\usepackage{verbatim}
+
+% Automatically remove leading whitespace in lstlisting
+\usepackage{lstautogobble}
+
+% CSV to tables
+\usepackage{csvsimple}
+
+% PDF-compatible landscape mode.
+% Makes PDF viewers show the page rotated by 90°.
+\usepackage{pdflscape}
+
+% Advanced tables
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+
+% Fancy tablerules
+\usepackage{booktabs}
+
+% Graphics
+\usepackage{graphicx}
+
+% Current time
+\usepackage[useregional=numeric]{datetime2}
+
+% Float barriers.
+% Automatically add a FloatBarrier to each \section
+\usepackage[section]{placeins}
+
+% Custom header and footer
+\usepackage{fancyhdr}
+
+\usepackage{geometry}
+\usepackage{layout}
+
+% Math tools
+\usepackage{mathtools}
+% Math symbols
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{amsthm}
+% General symbols
+\usepackage{stmaryrd}
+
+% Utilities for quotations
+\usepackage{csquotes}
+
+% Bibliography
+\usepackage[
+  style=alphabetic,
+  backend=biber, % Default backend, just listed for completness
+  sorting=ynt % Sort by year, name, title
+]{biblatex}
+\addbibresource{references.bib}
+
+\DeclarePairedDelimiter\abs{\lvert}{\rvert}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+\pagestyle{plain}
+
+% Source code & highlighting
+\usepackage{listings}
+
+% SI units
+\usepackage[binary-units=true]{siunitx}
+\DeclareSIUnit\cycles{cycles}
+
+% Should use this command wherever the print date is mentioned.
+\newcommand{\printdate}{\today}
+
+\newcommand{\mailsubject}{63112 Data Management Data Structures - Summary}
+\newcommand{\maillink}[1]{\href{mailto:#1?subject=\mailsubject}
+                               {#1}}
+
+\subject{63112 Data Management Data Structures}
+\title{Summary}
+
+\author{Michael Senn \maillink{michael.senn@students.unibe.ch} --- 16-126-880}
+
+\date{\printdate}
+
+% Needs to be the last command in the preamble, for one reason or
+% another. 
+\usepackage{hyperref}
+
+\begin{document}
+\maketitle
+
+\chapter{Introduction}
+
+\begin{itemize}
+		\item Different ways to classify data structures
+				\begin{itemize}
+						\item Probabilistic structures either trade off some
+								incorrect queries for a more compact
+								representation (e.g. bloom filter), or use
+								randomness for data layout (e.g. skiplist)
+						\item Persistent structures have built-in capabitlities
+								to offload parts, or all of it, to storage
+						\item Non-persistent ones assume they will live fully
+								in memory
+						\item Scalable
+						\item Compressed
+						\item Hash-based, Graph-Based, ...
+				\end{itemize}
+		\item Generic data structures able to store anything, as well as
+				specific ones for e.g. text, grpah, geo data, ...
+\end{itemize}
+
+\chapter{B trees}
+
+\section{Motivation}
+
+\begin{itemize}
+		\item Fast lookups over data which might not fit in memory
+		\item Efficient insertion and deletion (compared to e.g. sorted array)
+\end{itemize}
+
+\section{Variations}
+
+\begin{itemize}
+		\item B* tree: Each node $\geq 2/3$ full
+		\item B+ tree: Data only in leaf nodes
+		\item B-link tree: Nodes on each level form linked list
+		\item Often, tree with all these features also called B+ tree
+\end{itemize}
+
+\section{Layout}
+
+\begin{itemize}
+		\item Leaf nodes store data, either directly, or as pointer to actual
+				resource
+		\item Intermediary nodes contain separator keys which split data range
+				of leaf nodes down their respective paths
+		\item Large fanout factor (e.g. 100) means most space used for leaf
+				nodes. Allows to e.g. cache all non-leaf nodes in memory even
+				for gigantic tree.
+\end{itemize}
+
+\section{Operations}
+
+\begin{itemize}
+		\item Lookup traverses tree using separator keys until leaf node found
+		\item Range lookups can then use leaf-level links to travel to next leaf
+		\item On insertion, node might have to be split in two, with new separator key
+		\item On deletion, nodes might have to be merged. Or we simply don't do this
+\end{itemize}
+
+\section{Buffer pool}
+
+\begin{itemize}
+		\item Allows retrieving pages by logical ID
+		\item Allows retrieving fresh page
+		\item Can be asked to pin/unpin/flush pages
+		\item Handles associated disk IO if page not loaded
+		\item Caches pages (LRU, random, ...) in memory
+\end{itemize}
+
+\subsection{Optimizations}
+
+\begin{itemize}
+		\item Pointer swizzling: Pointers to page IDs can, when page is loaded
+				(and they point to a page which is /also/ loaded), be turned
+				into direct pointers to memory
+\end{itemize}
+
+\section{Various}
+
+\begin{itemize}
+		\item Read (write) amplification: Actual amount of data read (written)
+				compared to data we meant to read (write)
+		\item B+-tree is read-oriented
+		\item Unsuitable for variable keys (no stable fence keys) or large keys
+				(not many keys per page)
+\end{itemize}
+
+\chapter{LSM trees}
+
+\section{Motivation}
+
+\begin{itemize}
+		\item Write-oriented structure which still must support somewhat-efficient reads
+		\item E.g. logging sensor metrics, or transaction logs
+		\item In a B-tree a single 16B insert might cause 2-3 IOPS and 4KB of
+				data written. Not ideal.
+\end{itemize}
+
+\section{Structure}
+
+\textbf{Key insight} defer putting new data to persistent storage. Two
+components: One memory-resident, one disk-resident.
+
+\begin{itemize}
+		\item $C_0$ tree: In-memory component (very freeing, needn't care about
+				pages). Commonly done with e.g. Skiplist or AVL tree.
+		\item Inserts done into $C_0$ tree (and logged, for resiliency)
+		\item $C_0$ periodically compacted (merged) with on-disk $C_1$ component
+		\item With inserts meanwhile going into new $C_0$ component
+		\item $C_1$ can be done as fully loaded B-Tree. Or SSTables.
+		\item SSTables: Shallow tree for variable-length keys.
+\end{itemize}
+
+\subsection{SSTable layout (example)}
+
+\begin{itemize}
+		\item Multi-level structure.
+		\item Metadata of each SSTable: Key range (min, max), bloom filter,
+				fixed-size index mapping key to approximate location in file.
+		\item Fixed-size index can be achieved by e.g. using potentially
+				shortened separator keys, or subset of actual keys.
+		\item Lookup thus requires some traversal in structure
+		\item Actual data is sorted values, e.g. key-value pairs sorted by key.
+\end{itemize}
+
+\section{Operations}
+
+\begin{itemize}
+		\item Insertion: Log (resiliency), the insert to $C_0$
+		\item Compaction: Once $C_0$ full, flush to first disk tier. Write
+				*new* SSTable.
+		\item Merging: When $C_k$ full, merges entries of $C_k$ and produces
+				non-overlapping SSTables for $C_{k+1}$ tier
+		\item Lookup: Starting top down, for each SSTable: First check range.
+				Then bloom filter. Then approximate location using fixed-size
+				index. Then scan until data (or tombstone) found. Proceed to
+				next level if not found.
+		\item Deletion using tombstones
+\end{itemize}
+
+
+\printbibliography
+
+\end{document}
