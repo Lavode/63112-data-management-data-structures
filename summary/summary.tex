@@ -251,6 +251,83 @@ components: One memory-resident, one disk-resident.
 		\item Deletion using tombstones
 \end{itemize}
 
+\chapter{Probabilistic structures}
+
+\section{Motivation}
+
+\begin{itemize}
+		\item Use non-determinism for either a more compact representation (at
+				the cost of inaccurate queries)
+		\item Or for determining the topology of the data structure
+		\item Index lookups can be expensive if they don't produce a hit. Goal:
+				Structure in front which can cheaply catch large amount of
+				these before they hit the index.
+\end{itemize}
+
+\section{Excerpt Hashing}
+
+\begin{itemize}
+		\item Numerical hashing (division): $h(x) = x \bmod m$, choice of $m$
+				essential.  Primes not too close to power of two good.
+		\item Numerical hashing (multiplication): $h(x) = \floor{m \cdot A}
+				\bmod m$, choice of $m$ less important. $A$ can be e.g. golden
+				ratio. But more expensive than division.
+		\item String hashing: Use characters as coefficients of polynomial
+				(rolling around).
+		\item String hashing: Or FNV, MurmurHash3, very-fast hash functions
+		\item All of these non-cryptographic, e.g. no collision resistance!
+\end{itemize}
+
+\section{Bloom filters}
+
+\begin{itemize}
+		\item Bitmap with $m$ bits
+		\item $k$ hash functions which map to one of $m$ bits (just take
+				regular hash functions $\bmod m$)
+		\item To add element, hash with each function. Set bits which it maps to.
+		\item To check, equivalently
+		\item Can make hash functions use disjoint sets of bitmaps to prevent
+				contention during bit access.
+		\item More space for bitmap lowers false positiity rate. Or, keeping
+				false positivity rate equal, allows using fewer hash functions
+				(= faster).
+		\item Issues: No resizing, no deletion, no data locality so must be
+				in-memory for reasonable performance.
+\end{itemize}
+
+\section{Counting data structures}
+
+\begin{itemize}
+		\item Motivation: Keep track of unique visitors, or cardinality of a column
+		\item Naive approach: Keep list of sorted values. But then $O(log n)$
+				insertion and $O(n)$ space.
+		\item Alternatives: Hashing will bring updates down to constant time,
+				but still linear space. Sampling will trade off accuracy
+				(especially for low-frequency values!) for lower space usage.
+\end{itemize}
+
+\subsection{Linear counting}
+
+\begin{itemize}
+		\item Bitmap with $m$ bits
+		\item To insert, hash with one function and set corresponding bit
+		\item With $z$ bits set, estimator of count is then $-m \cdot ln(1 - z/m)$
+		\item Accuracy depends on load factor, so cardinality must be roughly known upfront
+		\item Required space to keep error low is proportional to cardinality
+\end{itemize}
+
+\subsection{Probabilistic counting}
+
+\begin{itemize}
+		\item Instead of setting bit $h(x)$, set the bit corresponding to the rightmost $1$ in $h(x)$
+		\item Then bits on left are way less likely to be set than bits on right (same idea as hash-based POW)
+		\item Given leftmost $0$ at position $n$, estimator is then $2^n/0.77$
+		\item But expected margin of error is 78 percent
+		\item Can be offset by using several such counters. Use hash output to select which counter to update.
+		\item Average of these counters can lower error margin to 10 percent for 64 maps.
+\end{itemize}
+
+
 
 \printbibliography
 
