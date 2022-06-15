@@ -327,7 +327,302 @@ components: One memory-resident, one disk-resident.
 		\item Average of these counters can lower error margin to 10 percent for 64 maps.
 \end{itemize}
 
+\section{Probabilistic balanced trees}
 
+\subsection{Background: Balanced trees}
+
+\begin{itemize}
+		\item Balance of node determined by difference in depth of right vs
+				left subtree
+		\item If difference exceeds 1, node is unbalanced
+		\item Balanced binary trees enforce balance by means of left- and
+				right-rotation around unbalanced nodes
+		\item RB trees relax the requirement to allow easier implementation:
+				Nodes are red or black, root is black, leaf nils are black, if
+				node is red then both children are black.
+		\item Then all paths from node to leaves have equal number of black
+				trees
+		\item Insertion is red
+		\item RB guarantees at most two rotations are needed on
+				insertion/deletion, though node must be able to change colour.
+\end{itemize}
+
+\subsection{PRNGs}
+
+\begin{itemize}
+		\item Sequence of pseudo-random numbers based on initial seed
+		\item Empirical tests
+				\begin{itemize}
+						\item Frequency: Uniform distribution in $[0, 1]$
+						\item Serial: Pairs of successive numbers must be
+								uniformly distributed
+						\item Gap: Gaps between occurrences of number $x$
+						\item Run: Length of monotone parts of sequence
+						\item Partition test, coupon collector's test, ...
+				\end{itemize}
+		\item LCG: Modulus $m > 0$, multiplier $0 < a < m$, increment $0 < c <
+				m$, starting value $0 < x_0 < m$. Output: $x_{n+1} = (a x_n +
+				c) \bmod m$.
+		\item LCG is fast, but not uniform on hyperplane, and not secure at all
+\end{itemize}
+
+\subsection{Skiplist}
+
+\begin{itemize}
+		\item Represent tree as linked list
+		\item Each node has $1$ to $n$ pointers to subsequent nodes
+		\item Height $n$ of node randomly chosen
+				\begin{itemize}
+						\item If height was deterministically (e..g $k \mod n$
+								for k-th node) then inserts would cause
+								rebalancing of the whole remainder of the tree.
+						\item With e.g. exponential falloff. Can be done as
+								successive coin tosses.
+				\end{itemize}
+		\item Pointer at height $k$ points to next node with height $k$
+		\item First and last node have maximum height $n$
+		\item Lookup follows highest pointer until it would overshoot, then
+				goes down one layer.
+		\item Insertion does lookup, then insertion with randomized height
+		\item Maximum height will not exceed $\log(n)$ in most cases
+		\item Expected length of path is fraction of $\log(n)$
+		\item Skiplists can be merged and concatenated in linear time
+\end{itemize}
+
+\chapter{Hashing}
+
+\section{Addressing methods}
+
+Recall: Hash function can be thought of as array, with values being hashed to
+an address / offset within the array.
+
+\begin{itemize}
+		\item Closed addressing
+				\begin{itemize}
+						\item Elements kept at address they hash to
+						\item In case of collisions, elements are chained
+						\item If number of elements per bucket is high, resizing required
+				\end{itemize}
+		\item Open addressing
+				\begin{itemize}
+						\item In case of collision, probing method (linear,
+								quadratic, ...) utilized to find place to put
+								it
+						\item Lookup stops when element, or empty slot, is
+								found
+						\item Worst-case insert and lookup performance $O(n)$,
+								when having to traverse whole array
+				\end{itemize}
+\end{itemize}
+
+\section{Universal hashing}
+
+Hash function which is ideal for a given dataset, with as few collisions as
+possible. Can sometimes be achieved by careful choice of hash function.
+
+\section{Cuckoo addressing}
+
+\begin{itemize}
+		\item Idea: Split hash table in two, use two hash functions
+		\item $h_1$ maps to first table, $h_2$ to second
+		\item Item will be found in either first or second table
+		\item Lookup and deletion simply check both
+		\item Insertion of $x$: Will be stored at position $h_1(x)$
+				\begin{itemize}
+						\item If $h_1(x)$ already occupied by $y$, $y$ will be displaced to $h_2(y)$
+						\item if $h_2(y)$ already occupied by $z$, $z$ will be displaced to $h_1(z)$
+						\item ...
+				\end{itemize}
+		\item Cycles can occur during insertion and are tricky to detect, as
+				only cycle if same slot visited twice with same originating
+				element
+				\begin{itemize}
+						\item Storing whole trace is expensive. Heuristic: Maximum chain
+								length, e.g. $\log_2(n)$ if $n$ slots
+						\item On (probably) cycle: Resize table or change hash function
+				\end{itemize}
+		\item Insight: Few elements cause cycles. Idea: Use additional
+				fixed-size stash where, if cycle detection kicks in, elements
+				are kept
+		\item Then during lookup, if cycle detected, stash is checked
+\end{itemize}
+
+\section{Hopscotch hashing}
+
+\begin{itemize}
+		\item Cuckoo's cache behaviour not ideal
+		\item Insight: Make sure displaced location is near original location
+		\item Single array, single hashfunction, hop-info bitmap of size $H$.
+		\item Intuition: Item found at place it hashes to, or at most $H-1$
+				positions after that.
+		\item Insertion:
+				\begin{itemize}
+						\item If no collision, insert $x$ at $h(x)$ and set 0-th bit of bitmap
+						\item If collision, displace existing (or new) item.
+								Find empty slot within reach of bitmap, and set
+								corresponding bit.
+				\end{itemize}
+		\item Reach of one field can contain fields occupied by displaced
+				elements from other fields, do not touch those.
+		\item If insertion finds no free space, do linear probing to find first
+				unoccupied slot. Then, `bring free space closer' by moving
+				items inbetween $h(x)$ and first free slot where their bitmaps
+				permit, see figure \ref{img:hopscotch}.
+		\item If we can't bring free space close enough, resize
+		\item Capping $H$ to small value makes insertion, lookup, deletion $O(1)$
+				\begin{itemize}
+						\item Constants will be different, insertion might
+								manipulate $k \cdot O(1)$ elements for some
+								constant $k$.
+				\end{itemize}
+\end{itemize}
+
+\begin{figure}
+		\centering
+		\includegraphics[width=\textwidth]{resources/07_hopscotch}
+		\caption{Hopscotch hashing: Handling collisions \& lack of free space}
+		\label{img:hopscotch}
+\end{figure}
+
+\section{Further improvements}
+
+\begin{itemize}
+		\item Swiss tables: SIMD instructions to test all keys in hop window at
+				once
+\end{itemize}
+
+\chapter{LSM Recap, Tries, Various}
+
+\begin{itemize}
+		\item General idea: One region in memory, one in storage.
+		\item Storage region has multiple tiers, growing (exponentially) in size
+		\item Storage tiers often as skiplists
+\end{itemize}
+
+\section{Insertion}
+
+\begin{itemize}
+		\item Log for ACID purposes
+		\item Insert in in-memory structure
+\end{itemize}
+
+\section{Compaction (flush memory to highest disk tier)}
+
+\begin{itemize}
+		\item Triggered once in-memory structure full
+		\item Traverse memory structure, keep track of min/max
+		\item Write new SSTable to first disk tier
+\end{itemize}
+
+\section{Merging (flush disk to lower disk tier)}
+
+\begin{itemize}
+		\item Triggered once disk tier $k$ full
+		\item Merges upper-tier SSTables into lower-tier SSTables
+		\item Creates non-overlapping SSTables (more performant for future lookups and merging)
+		\item This causes write amplification
+\end{itemize}
+
+\section{SStable layout}
+
+\begin{itemize}
+		\item Immutable file
+		\item Metadata
+				\begin{itemize}
+						\item Key range (min/max): Allows to check at a glance whether key might be contained within
+						\item Bloom filter: Further prevent lookups of nonexistant keys
+						\item Fixed-size index providing lookup of key to
+								approximate location in SStable. Might use
+								subset or trunated keys.
+				\end{itemize}
+		\item Data as sorted values (by key)
+\end{itemize}
+
+\subsection{Lookup}
+
+\begin{itemize}
+		\item Merge iterator
+				\begin{itemize}
+						\item Gathers all SSTables (based on min/max and bloom
+								filter) which might contain key
+						\item Gets initial position in file using approximate index
+						\item Iterates over all remaining ones until it finds
+								looked-up key, or iterator terminates
+				\end{itemize}
+\end{itemize}
+
+\section{Column-oriented DBs}
+
+\begin{itemize}
+		\item When storing wide tuples, and wanting to e.g. aggregate along one dimension
+		\item Define column families, which are columns often queried together
+		\item Then store each primary key to family map in its own structure
+\end{itemize}
+
+\section{Indexing structures}
+
+\begin{itemize}
+		\item Hash based
+		\item Trees
+		\item Sorted arrays
+		\item Tries
+		\item Graphs
+\end{itemize}
+
+\section{Tries}
+
+\begin{itemize}
+		\item Prefix tree, keys spread along edges as e.g. bytes
+		\item No balancing
+		\item Lookup complexity depends on key length (opposed to B-tree, where logarithmic in number of keys)
+		\item Lookup can terminate early (opposed to B-tree, where always to leaf)
+\end{itemize}
+
+\subsection{Representation}
+
+\begin{itemize}
+		\item Each node as fixed-size array of pointers
+		\item E.g. fanout factor = 1 byte
+		\item Looking up key then is a constant-time lookup in each node's array
+		\item Span: Number of bits to represent part of key encoded in one
+				node. E.g. span = 8 for byte fanout.
+				\begin{itemize}
+						\item Small span leads to compact representation with
+								large depth, large span to sparse
+								representation with shallow depth.
+				\end{itemize}
+		\item $count$ equal nodes with value $node$ can be compacted ot one
+				$(count, node)$ meta-node.
+\end{itemize}
+
+\subsection{Example: Encoding DNA}
+
+\begin{itemize}
+		\item Fanout factor of four (ACTG)
+		\item Per node:
+				\begin{itemize}
+						\item 4 pointers, 8B each
+						\item 4 4B reference counters
+						\item 4 1B bitmaps to mark whether pointers exist
+								\begin{itemize}
+										\item Alternatively use special value
+												to indicate nonexistant
+												pointer. Can be done as
+												pointers are block-aligned, so
+												invalid values exist.
+								\end{itemize}
+				\end{itemize}
+		\item Insertion adds special terminator node to indicate existence of key
+		\item And otherwise just sets pointers and increments counters along
+				the way
+		\item Deletion performs lookup to check key exists, then moves upwards
+				to topmost node with reference counter (for appropriate edge)
+				of 1, then deletes anything from there below.
+		\item Reference counter could be per node, but then would need to dive
+				down one more level to find out what to delete.
+\end{itemize}
+
+Heavily inefficient!
 
 \printbibliography
 
