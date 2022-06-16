@@ -562,10 +562,29 @@ possible. Can sometimes be achieved by careful choice of hash function.
 \section{Indexing structures}
 
 \begin{itemize}
-		\item Hash based
-		\item Trees
 		\item Sorted arrays
+				\begin{itemize}
+						\item Bad if index mutable, as modifications cause lots of shifts
+						\item Excellent if immutable
+				\end{itemize}
+		\item Hash based
+				\begin{itemize}
+						\item Good if able to sacrifice some space (60 percent fill factor) and benefit from constant-time lookup
+						\item Bad if in need of range lookups
+				\end{itemize}
+		\item Trees
+				\begin{itemize}
+						\item Good if we need exact and range lookups as well as updates
+						\item Some trees suitable for partially in memory, partially on disk
+						\item Not ideal for variable length keys (uneven fanout)
+						\item Generally an universal choice
+				\end{itemize}
 		\item Tries
+				\begin{itemize}
+						\item Good if we need support for variable-length keys
+						\item Lookup depth likely larger than trees
+						\item Naive implementation very inefficient, especially if uniform distribution
+				\end{itemize}
 		\item Graphs
 \end{itemize}
 
@@ -623,6 +642,254 @@ possible. Can sometimes be achieved by careful choice of hash function.
 \end{itemize}
 
 Heavily inefficient!
+
+\chapter{Learned structures}
+
+\begin{itemize}
+		\item Lookup in tree: First find page which key is in, then lookup within page
+		\item Idea: What if we had a model to tell us which range of pages key
+				is in? Model could be aware of key domain.
+		\item Possibilities:
+				\begin{itemize}
+						\item Replace branch-heavy lookups
+						\item Control index size vs accuracy tradeoff
+						\item Potentially achieve constant-time lookup
+				\end{itemize}
+\end{itemize}
+
+\section{Performance goals}
+
+\begin{itemize}
+		\item How complex can model be?
+				\begin{itemize}
+						\item Imagine B+ tree with 100M entries, fanout 100
+						\item Thus each level reduces domain by factor 100.
+								Assume one lookup costs 50 cycles.
+						\item Model thus more efficient iff it can reduce space
+								by factor 100 in 50 cycles
+						\item That's 400 operations if we use 8-way SIMD
+						\item Certainly can't use a neural network, but a
+								variety of models fit in there
+				\end{itemize}
+\end{itemize}
+
+\section{CDF model}
+
+\begin{itemize}
+		\item Approximate CDF of data with simpler model (e.g. linear)
+		\item Maximum error (relevant for lookup) can easily be calculated as
+				maximum deviation of model and actual CDF, see figure
+				\ref{fig:cdf}
+		\item Issue: CDF may look linear-ish if zomed out, but can have a lot
+				of non-linearity in detail. Leads to rather larger errors of a
+				linear approxmiation.
+		\item Approach 1: Use linear regressions for each linear-ish part, pierce together (= Radix spline)
+		\item Approach 2: Also segment curve, but use not only linear models (= RMI)
+\end{itemize}
+
+\section{Recursive model index}
+
+\begin{itemize}
+		\item Tree of models. Each intermediary node guides towards next choice of model
+		\item Leaf node selects position in page
+		\item Models can be linear, cubic, radix, ...
+		\item Training RMI: Output of reference implementation is actual C++
+				code which handles lookup
+\end{itemize}
+
+\section{Results from paper}
+
+\begin{itemize}
+		\item B-Tree page size has no effect on effective lookup time, as
+				tradeoff is tree traversal time vs page traversal time, which
+				cancels out.
+		\item For learned model, more models (i.e. larger tree depth) lowers
+				lookup time, as position estimate is more accurate
+		\item In examined data sets, learned indices are better both for
+				absolute size, as well as lookup time
+		\item But: Construction is expensive, and updating the index is not
+				straight-forward.
+\end{itemize}
+
+\section{Radix spline}
+
+\begin{itemize}
+		\item Approximation of CDF using set of spline points and radix table
+		\item Preset error bound $r$, e.g. 32 (max number of points between two
+				spline points)
+		\item Most significant $r$ bits of key are index on radix table
+		\item Entries on table point to spline points on CDF
+		\item Key, if present, is between that point and subsequent one
+		\item Points spaced approriately based on error bound
+		\item Advantage over RMI: Single-pass creation. Iterate over CDF, once
+				error exceeds $r$ then put additional spline point.
+\end{itemize}
+
+\section{Other learned structures}
+
+\begin{itemize}
+		\item Hash tables: Ties into universal hashing, using a model to
+				map keys to buckets rather than hash function.
+		\item Bloom filter: Use model rather than hash function to figure out
+				which bits to set.
+		\item Bloom filter 2: Use model in front of bloom filter to limit
+				whether we query bloom filter at all.
+\end{itemize}
+
+\begin{figure}
+		\centering
+		\includegraphics[width=\textwidth]{resources/09_cdf}
+		\caption{CDF Model}
+		\label{fig:cdf}
+\end{figure}
+
+\chapter{Columnar data formats}
+
+\begin{itemize}
+		\item Recent hardware has lots of memory
+		\item But memory is inherently linear, multi-dimensional access mapped to linear sequence.
+		\item And latency still comparably high
+\end{itemize}
+
+\section{Row-data layout}
+
+\begin{itemize}
+		\item Data stored tuple-wise
+		\item Optimized for access by rows
+		\item Not ideal for sequential scan of single attribute
+\end{itemize}
+
+\section{Columnar data layout}
+
+\begin{itemize}
+		\item Data stored attribute-wise
+		\item Operations over an attribute efficient, as sequential
+		\item Tuple reconstruction expensive
+\end{itemize}
+
+\section{Example}
+
+\begin{itemize}
+		\item Assume 8 billion tuples, 200B each. Total of 1.6 TB
+		\item 2 MB / ms / core scan speed
+		\item Assume memory access in blocks of 64B
+		\item Access of a bit flag for all tuples
+				\begin{itemize}
+						\item Row-data: 8 billion 64B accesses, so 512GB. 256s with one core.
+						\item Columnar data: 8 billion times 1 bit, so 1GB. 0.5s with one core.
+				\end{itemize}
+\end{itemize}
+
+\section{Dictionary encoding}
+
+\begin{itemize}
+		\item Main memory access is usually bottleneck. Idea: Trade CPU time vs
+				less data. Encode attribute values, operate on encoded values.
+		\item Assumes limited value domain, otherwise no encoding exists which
+				is more efficient than unencoded data.
+		\item Each column is split into dictionary and attribute vector.
+				Dictionary contains all possible values of attribute (e.g.
+				names) with implicit positional ID, attribute vector contains
+				respective ID for each stored tuple.
+		\item Dictionary entries sorted lexicographically / numerically. Allows
+				$O(\log(n))$ lookup.
+		\item Dictionary can also be compressed
+		\item Works well if ratio of size of values to size of domain is large,
+				e.g. countries or names. 200 countries, can be encoded as 8
+				bit. If stored directly, country names might be up to 50
+				characters, so up to 50B.
+		\item Works badly otherwise, e.g. birthdays. Assume people at most 110
+				years of age. Then $110*365 \approx 40000$ values, so need $2B$
+				to encode. Each value can also be directly stored as MMDDYY
+				though, which fits in 17 bit, so little gain.
+\end{itemize}
+
+\section{Insertion}
+
+\begin{itemize}
+		\item Insertion into columnar storage generally more expensive than into row storage
+		\item Insertion into compressed / encoded storage can be expensive,
+				might e.g. involve updating sorted dictionaries.
+		\item Insertion into updated sorted dictionary might, if implicit ID
+				used, require changing reference IDs of all existing tuples.
+\end{itemize}
+
+\section{Compression}
+
+\subsection{Run-length encoding}
+
+\begin{itemize}
+		\item Replace sequence of equal values with one occurence, and either
+				a) number of occurrences or b) its start position
+		\item Approach b) is faster for lookup. Can first do binary search on
+				start-position vector to find largest index smaller than lookup
+				position. Associated value is then value of that tuple.
+		\item Approach a) requires summing up counts until we find first which
+				is gt-or-equal than lookup position
+		\item Efficient if a lot of repetition, e.g. nationality
+\end{itemize}
+
+\subsection{Sparse encoding}
+
+\begin{itemize}
+		\item Remove value which occurs the most often
+		\item Bit vector indicates at which positions value was removed
+		\item Advantage over run-length encoding in that it also works for
+				unsorted tables
+		\item Good if heavily skewed distribution, e.g. 2nd nationality, which
+				most people don't have.
+		\item But access for those tuples where value was not removed requires
+				counting 0-bits in bit vector up to that value. Probably need LUT.
+\end{itemize}
+
+\section{Bitmap indices}
+
+\begin{itemize}
+		\item Assume data with low cardinality (arranged in some canonical
+				order)
+		\item Represent attribute with bitmap, where bit $i$ is set if tuple's
+				value is $i$
+		\item If we have multiple attributes with bitmap indices, then AND
+				filter on those attributes can be done as bitwise AND on
+				bitmaps.
+		\item Run-length encoding can be applied to these bitmap indices
+		\item Alternatively: Bit-aligned bitmap code or word-aligned bitmap code
+\end{itemize}
+
+\subsection{Word-aligned bitmap code}
+
+\begin{itemize}
+		\item Operates on arbitrary words, not bitmaps
+		\item Two types of words: Literal and fill. MSB is 0 for literal, 1 for fill.
+		\item For fill words: Second bit is value, lower bits are length (in
+				bloks!) which is `filled in' with that value
+		\item See figure \ref{fig:wah}
+				\begin{itemize}
+						\item First 32bit word: 0x40000380
+								\begin{itemize}
+										\item MSB = 0 so literal
+										\item 1 1, 20 0s, 3 1s, 7 0s
+								\end{itemize}
+						\item Second 32bit word: 0x80000002
+								\begin{itemize}
+										\item MSB = 1 so fill
+										\item 2nd bit = 0, so fill with 0
+										\item Low-order bits = 2, so stands for two blocks' worth of 0s
+								\end{itemize}
+				\end{itemize}
+		\item Two such-compressed bitmap indices can be aligned with each other
+				word-wise, with fill words occupying as many words as their
+				low-order bits dictate.
+		\item Then binary operations on these compressed indices directly possible
+\end{itemize}
+
+\begin{figure}
+		\centering
+		\includegraphics[width=\textwidth]{resources/10_wah}
+		\caption{WAH compression}
+		\label{fig:wah}
+\end{figure}
+
 
 \printbibliography
 
